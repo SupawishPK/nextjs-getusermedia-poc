@@ -7,7 +7,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
    - ขอสิทธิ์กล้อง/ไมค์ ด้วย getUserMedia หลายรูปแบบ
    - enumerateDevices + Permissions API
    - getDisplayMedia (แชร์หน้าจอ)
-   - Log ทุก event: console + หน้าจอ + server (logs/client.log)
+   - Log ทุก event: console + หน้าจอ + localStorage
+     (localStorage ทำให้ log รอด reload และทำงานได้ทั้ง dev
+      และ static export / GitHub Pages)
    ============================================================ */
 
 type LogLevel = "INFO" | "SUCCESS" | "WARN" | "ERROR";
@@ -31,6 +33,9 @@ interface StreamInfo {
   tracks: { kind: string; label: string; readyState: string; muted: boolean }[];
   settings: { width?: number; height?: number; frameRate?: number; facingMode?: string; deviceId?: string } | null;
 }
+
+/* key สำหรับเก็บ log ไว้ใน localStorage (วงแหวน ~500 รายการ) */
+const LS_KEY = "gum-poc-logs";
 
 /* รูปแบบการขอสิทธิ์ทั้งหมดที่ใช้ใน POC นี้ */
 const VARIANTS: { id: string; label: string; constraints: MediaStreamConstraints }[] = [
@@ -114,7 +119,7 @@ export default function GetUserMediaPocPage() {
   const [streamInfo, setStreamInfo] = useState<StreamInfo | null>(null);
   const [isSecure, setIsSecure] = useState(true);
 
-  /* -------- logging: หน้าจอ + console + server (logs/client.log) -------- */
+  /* -------- logging: หน้าจอ + console + localStorage -------- */
   const log = useCallback((level: LogLevel, category: string, message: string, detail?: string) => {
     const entry: LogEntry = {
       id: ++idRef.current,
@@ -131,13 +136,14 @@ export default function GetUserMediaPocPage() {
     else if (level === "WARN") console.warn(prefix, detail ?? "");
     else console.log(prefix, detail ?? "");
 
-    fetch("/api/log", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ level, category, message, detail, url: window.location.href }),
-    }).catch(() => {
-      /* ไม่ block UI ถ้า log ฝั่ง server ล้ม */
-    });
+    /* persist ลง localStorage — ใช้ได้ทั้ง dev และ static export (ไม่มี server ให้ POST log) */
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_KEY) ?? "[]") as Array<Omit<LogEntry, "id">>;
+      saved.push({ level, category, message, detail, time: entry.time });
+      localStorage.setItem(LS_KEY, JSON.stringify(saved.slice(-500)));
+    } catch {
+      /* localStorage ใช้ไม่ได้ (privacy mode) — ข้าม ไม่ block UI */
+    }
   }, []);
 
   /* -------- ขอสิทธิ์กล้อง/ไมค์ (getUserMedia) -------- */
@@ -291,8 +297,17 @@ export default function GetUserMediaPocPage() {
     }
   }, [log]);
 
-  /* -------- mount: เช็ค secure context + สิทธิ์ + อุปกรณ์ -------- */
+  /* -------- mount: โหลด log เดิม + เช็ค secure context + สิทธิ์ + อุปกรณ์ -------- */
   useEffect(() => {
+    /* โหลด log เก่าจาก localStorage กลับมา (กรณีเปิดซ้ำ/refresh) */
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_KEY) ?? "[]") as Array<Omit<LogEntry, "id">>;
+      saved.forEach((s) => setLogs((prev) => [...prev, { ...s, id: ++idRef.current }]));
+      if (saved.length > 0) console.info(`[gum-poc] โหลด log เดิมจาก localStorage กลับมา ${saved.length} รายการ`);
+    } catch {
+      /* ไม่มี log เก่า หรือ localStorage เสีย */
+    }
+
     setIsSecure(window.isSecureContext);
     log(
       "INFO",
@@ -335,6 +350,11 @@ export default function GetUserMediaPocPage() {
   const clearLogs = useCallback(() => {
     setLogs([]);
     idRef.current = 0;
+    try {
+      localStorage.removeItem(LS_KEY);
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   /* -------- render -------- */
@@ -348,7 +368,7 @@ export default function GetUserMediaPocPage() {
       <header className="header">
         <h1>📷 POC: getUserMedia (สิทธิ์กล้อง/ไมค์)</h1>
         <p className="sub">
-          ทดสอบการขอ permission กล้อง/ไมค์ทุกรูปแบบในหน้าเดียว — ทุก event ถูก log ไปที่ console, หน้าจอ และ <code>logs/client.log</code>
+          ทดสอบการขอ permission กล้อง/ไมค์ทุกรูปแบบในหน้าเดียว — ทุก event ถูก log ไปที่ console, หน้าจอ และ <code>localStorage</code> (ดาวน์โหลดเป็นไฟล์ได้)
         </p>
         <p className="sub">
           Next.js {`${VARIANTS.length}`} รูปแบบการขอ + enumerateDevices + Permissions API + getDisplayMedia
@@ -358,7 +378,7 @@ export default function GetUserMediaPocPage() {
       {!isSecure && (
         <div className="banner warn">
           ⚠️ หน้านี้ไม่ได้รันบน <b>HTTPS หรือ localhost</b> — getUserMedia จะถูก block ด้วย SecurityError เกือบทุกเบราว์เซอร์ วิธีแก้: รัน
-          <code>npm run dev</code> แล้วเปิด <code>http://localhost:3000</code> หรือ deploy ขึ้น HTTPS
+          <code>npm run dev</code> แล้วเปิด <code>http://localhost:3000</code> หรือเปิดผ่าน GitHub Pages (HTTPS อัตโนมัติ)
         </div>
       )}
 
@@ -438,7 +458,7 @@ export default function GetUserMediaPocPage() {
       {/* Log panel */}
       <section className="card">
         <div className="log-header">
-          <h2>5) Log (console + server logs/client.log)</h2>
+          <h2>5) Log (console + localStorage + ดาวน์โหลด)</h2>
           <div className="log-actions">
             <button className="btn ghost small" onClick={copyLogs}>📋 คัดลอก</button>
             <button className="btn ghost small" onClick={downloadLogs}>⬇️ ดาวน์โหลด</button>
@@ -463,7 +483,7 @@ export default function GetUserMediaPocPage() {
       </section>
 
       <footer className="footer">
-        <p>POC getUserMedia — รันด้วย <code>npm run dev</code> แล้วเปิด <code>http://localhost:3000</code></p>
+        <p>POC getUserMedia — รันด้วย <code>npm run dev</code> แล้วเปิด <code>http://localhost:3000</code> หรือดูเวอร์ชัน GitHub Pages</p>
       </footer>
     </main>
   );

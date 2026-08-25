@@ -1,13 +1,15 @@
 # 📷 POC: getUserMedia (สิทธิ์กล้อง/ไมค์) — Next.js
 
 ทดสอบการขอ **permission กล้อง/ไมค์** ด้วย `navigator.mediaDevices.getUserMedia` ครบทุกรูปแบบใน **หน้าเดียว**
-พร้อม **error logging** ครบทั้ง 3 ชั้น: console → หน้าจอ → ไฟล์ `logs/client.log`
+พร้อม **error logging** ครบ 3 ชั้น: console → หน้าจอ → localStorage (ดาวน์โหลดเป็นไฟล์ได้)
 
-> สร้างด้วย Next.js 16 (App Router + TypeScript)
+> สร้างด้วย Next.js 16 (App Router + TypeScript) — deploy ได้ทั้ง local dev และ **GitHub Pages** (static export)
+
+🔗 **GitHub Pages (live):** https://supawishpk.github.io/nextjs-getusermedia-poc/
 
 ---
 
-## 🚀 วิธีรัน
+## 🚀 วิธีรัน (local dev)
 
 ```bash
 npm install
@@ -18,6 +20,40 @@ npm run dev
 
 > ⚠️ **สำคัญ:** `getUserMedia` ทำงานได้เฉพาะบน **HTTPS หรือ localhost** เท่านั้น
 > ถ้าเปิดผ่าน `http://` (เครื่องอื่น) หรือ `file://` จะโดน `SecurityError`
+> **GitHub Pages มี HTTPS ให้อัตโนมัติ** จึงทดสอบบนมือถือผ่านลิงก์ Pages ได้เลย
+
+---
+
+## 🌐 Deploy ขึ้น GitHub Pages
+
+Repo นี้ deploy ด้วยวิธี **gh-pages branch** — push ไฟล์ static ที่ build เสร็จแล้วตรงๆ ขึ้น branch `gh-pages`
+(วิธีนี้ใช้ token ที่ไม่มี `workflow` scope ได้ ไม่ต้องพึ่ง GitHub Actions)
+
+### Deploy (ทุกครั้งที่อัปเดตโค้ด)
+
+```bash
+# 1) build static export (Windows PowerShell ใช้ $env:DEPLOY_TARGET="gh-pages")
+DEPLOY_TARGET=gh-pages npm run build
+
+# 2) อัปเดต branch gh-pages ด้วยเนื้อหาใน out/
+git checkout --orphan gh-pages
+git rm -rf .
+cp -r out/* . && touch .nojekyll
+git add -A && git commit -m "deploy: update static site"
+git push origin gh-pages
+
+# 3) กลับไปทำงานที่ master
+git checkout master
+```
+
+### ตั้งค่า Pages (ทำครั้งแรกครั้งเดียว)
+
+ไปที่ **Settings → Pages** → Build and deployment → Source เลือก **"Deploy from a branch"** → branch `gh-pages` / folder `/ (root)` → Save
+
+> 💡 **อยากได้ auto-deploy ไหม?** (push master แล้ว deploy อัตโนมัติ) ต้องใช้ PAT ที่มี **`workflow` scope**
+> ถึงจะ push ไฟล์ `.github/workflows/deploy.yml` ได้ — workflow file พร้อมใช้อยู่ที่ `~/deploy-backup/deploy.yml`
+> สร้าง PAT ใหม่ที่ https://github.com/settings/tokens (ติ๊ก scope `workflow` + `repo`) แล้วย้ายไฟล์กลับเข้า
+> `.github/workflows/` push ขึ้น master เท่านี้ก็ auto-deploy ต่อจากนั้น
 
 ---
 
@@ -52,11 +88,11 @@ npm run dev
 
 1. **Browser console** — `console.log/warn/error` (F12)
 2. **หน้าจอ** — Log panel ด้านล่างของหน้า (มีปุ่ม คัดลอก / ดาวน์โหลด / ล้าง)
-3. **ไฟล์ `logs/client.log`** — เขียนผ่าน API route `POST /api/log` ฝั่ง server
-   (รูปแบบ JSON 1 บรรทัด/event: timestamp, level, category, message, detail, url, userAgent, ip)
+3. **localStorage** (key `gum-poc-logs`) — เก็บ ~500 รายการล่าสุด **รอดข้าม reload** และใช้ได้ทั้ง dev และ static export (GitHub Pages ไม่มี server ให้ POST log)
 
-> ไฟล์ `logs/*.log` ถูก gitignore ไว้ (push เฉพาะ folder ผ่าน `.gitkeep`)
-> แต่ถ้าอยากให้ log ขึ้น git ด้วย ให้ลบบรรทัด `logs/*.log` ออกจาก `.gitignore`
+> 💡 **ทำไมไม่มี API route?** GitHub Pages เป็น static อย่างเดียว รองรับแค่ GET — `POST /api/log`
+> จึงไปต่อไม่ได้ เลยออกแบบ logging อยู่ฝั่ง client (localStorage) ซึ่งทำงานเหมือนกันทุก environment
+> ถ้าอยากได้ server-side log จริง ต้อง deploy ที่มี Node server (Vercel, Railway, VPS...)
 
 ---
 
@@ -66,19 +102,17 @@ npm run dev
 app/
 ├── page.tsx            # หน้า POC ทั้งหมด (client component ไฟล์เดียว)
 ├── layout.tsx
-├── globals.css
-└── api/
-    └── log/
-        └── route.ts    # POST /api/log — เขียน log ลง logs/client.log
-logs/
-└── .gitkeep            # folder เก็บ log (ไฟล์ log จริงโดน gitignore)
+└── globals.css
+next.config.ts          # output: export + basePath ตอน DEPLOY_TARGET=gh-pages
+out/                    # ผลลัพธ์ static export (สร้างตอน build, โดน gitignore บน master)
+gh-pages branch         # เนื้อหา out/ + .nojekyll — ใช้เป็น source ของ GitHub Pages
 ```
 
 ---
 
 ## 📌 หมายเหตุ POC
 
-- บนมือถือต้องเปิดผ่าน **HTTPS** (localhost บนเครื่องตัวเองใช้ได้) และต้องใช้เบราว์เซอร์ที่รองรับ
+- บนมือถือต้องเปิดผ่าน **HTTPS** — ใช้ลิงก์ GitHub Pages ได้เลย
 - Safari/Firefox **ไม่รองรับ** `permissions.query({name: 'camera'})` — หน้าเว็บจะแสดง "ไม่รองรับ" และแนะนำให้ขอสิทธิ์ผ่านปุ่ม getUserMedia ตรงๆ แทน
 - `enumerateDevices()` จะเห็น **label** ของอุปกรณ์เฉพาะหลังได้รับสิทธิ์แล้วเท่านั้น
 - ถ้า user เคยกด **Block** ไปแล้ว ต้องไปรีเซ็ตสิทธิ์ที่ตั้งค่าเบราว์เซอร์ (🔒 ข้าง address bar → Site settings) หรือที่ Windows Settings → Privacy → Camera/Microphone
