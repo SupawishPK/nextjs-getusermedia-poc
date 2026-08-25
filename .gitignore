@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local log files (keep folder via logs/.gitkeep)
+logs/*.log

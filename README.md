@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 📷 POC: getUserMedia (สิทธิ์กล้อง/ไมค์) — Next.js
 
-## Getting Started
+ทดสอบการขอ **permission กล้อง/ไมค์** ด้วย `navigator.mediaDevices.getUserMedia` ครบทุกรูปแบบใน **หน้าเดียว**
+พร้อม **error logging** ครบทั้ง 3 ชั้น: console → หน้าจอ → ไฟล์ `logs/client.log`
 
-First, run the development server:
+> สร้างด้วย Next.js 16 (App Router + TypeScript)
+
+---
+
+## 🚀 วิธีรัน
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+เปิดเบราว์เซอร์ที่ **http://localhost:3000**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> ⚠️ **สำคัญ:** `getUserMedia` ทำงานได้เฉพาะบน **HTTPS หรือ localhost** เท่านั้น
+> ถ้าเปิดผ่าน `http://` (เครื่องอื่น) หรือ `file://` จะโดน `SecurityError`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 🧪 ทดสอบอะไรได้บ้าง (ในหน้าเดียว)
 
-To learn more about Next.js, take a look at the following resources:
+| หัวข้อ | รายละเอียด |
+|---|---|
+| **สถานะสิทธิ์** | Permissions API (`navigator.permissions.query`) เช็คสถานะ `prompt / granted / denied` ของกล้อง+ไมค์ แบบ realtime |
+| **ขอสิทธิ์ 7 แบบ** | `video: true`, HD 720p, FHD 1080p, `facingMode: user` (กล้องหน้า), `facingMode: environment` (กล้องหลัง), กล้อง+ไมค์, ไมค์อย่างเดียว |
+| **deviceId** | `enumerateDevices()` + เลือกกล้องจากรายการ แล้วขอด้วย `{ deviceId: { exact } }` |
+| **แชร์หน้าจอ** | `getDisplayMedia()` |
+| **พรีวิว** | ดูภาพสด + แสดง `getSettings()` (resolution, fps, facingMode, deviceId) และรายชื่อ tracks |
+| **หยุด stream** | `stop()` ทุก track |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Error ที่จัดการไว้ (log พร้อมคำแนะนำ)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Error name | สาเหตุ |
+|---|---|
+| `NotAllowedError` | ผู้ใช้ปฏิเสธสิทธิ์ / เคยกด Block ไว้ |
+| `NotFoundError` | ไม่พบกล้อง/ไมค์ในเครื่อง |
+| `NotReadableError` | อุปกรณ์ถูกแอปอื่นยึด (Zoom, Teams, OBS...) |
+| `OverconstrainedError` | constraint ที่ขอเกินความสามารถอุปกรณ์ |
+| `SecurityError` | ไม่ได้รันบน HTTPS/localhost |
+| `AbortError` | มีคำขอ getUserMedia อื่นค้างอยู่ |
+| `TypeError` | constraints ไม่ถูกต้อง |
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📝 Logging ทำงานยังไง
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+ทุก event (ขอสิทธิ์, สำเร็จ, error, อุปกรณ์, เปลี่ยนสิทธิ์) จะถูกบันทึก **3 ที่พร้อมกัน**:
+
+1. **Browser console** — `console.log/warn/error` (F12)
+2. **หน้าจอ** — Log panel ด้านล่างของหน้า (มีปุ่ม คัดลอก / ดาวน์โหลด / ล้าง)
+3. **ไฟล์ `logs/client.log`** — เขียนผ่าน API route `POST /api/log` ฝั่ง server
+   (รูปแบบ JSON 1 บรรทัด/event: timestamp, level, category, message, detail, url, userAgent, ip)
+
+> ไฟล์ `logs/*.log` ถูก gitignore ไว้ (push เฉพาะ folder ผ่าน `.gitkeep`)
+> แต่ถ้าอยากให้ log ขึ้น git ด้วย ให้ลบบรรทัด `logs/*.log` ออกจาก `.gitignore`
+
+---
+
+## 📁 โครงสร้าง
+
+```
+app/
+├── page.tsx            # หน้า POC ทั้งหมด (client component ไฟล์เดียว)
+├── layout.tsx
+├── globals.css
+└── api/
+    └── log/
+        └── route.ts    # POST /api/log — เขียน log ลง logs/client.log
+logs/
+└── .gitkeep            # folder เก็บ log (ไฟล์ log จริงโดน gitignore)
+```
+
+---
+
+## 📌 หมายเหตุ POC
+
+- บนมือถือต้องเปิดผ่าน **HTTPS** (localhost บนเครื่องตัวเองใช้ได้) และต้องใช้เบราว์เซอร์ที่รองรับ
+- Safari/Firefox **ไม่รองรับ** `permissions.query({name: 'camera'})` — หน้าเว็บจะแสดง "ไม่รองรับ" และแนะนำให้ขอสิทธิ์ผ่านปุ่ม getUserMedia ตรงๆ แทน
+- `enumerateDevices()` จะเห็น **label** ของอุปกรณ์เฉพาะหลังได้รับสิทธิ์แล้วเท่านั้น
+- ถ้า user เคยกด **Block** ไปแล้ว ต้องไปรีเซ็ตสิทธิ์ที่ตั้งค่าเบราว์เซอร์ (🔒 ข้าง address bar → Site settings) หรือที่ Windows Settings → Privacy → Camera/Microphone
