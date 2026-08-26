@@ -27,6 +27,7 @@ interface DeviceLite {
   deviceId: string;
   kind: string;
   label: string;
+  groupId: string;
 }
 
 interface StreamInfo {
@@ -252,13 +253,18 @@ export default function GetUserMediaPocPage() {
         deviceId: d.deviceId,
         kind: d.kind,
         label: d.label || "(ยังไม่ระบุชื่อ — ต้องขอสิทธิ์ก่อน ถึงจะเห็น label)",
+        groupId: d.groupId || "",
       }));
       setDevices(clean);
+      const counts = clean.reduce<Record<string, number>>((acc, d) => {
+        acc[d.kind] = (acc[d.kind] ?? 0) + 1;
+        return acc;
+      }, {});
       log(
         "INFO",
         "enumerateDevices",
-        `พบอุปกรณ์ทั้งหมด ${list.length} ตัว`,
-        clean.map((d) => `${d.kind}: ${d.label}`).join(" | ")
+        `พบอุปกรณ์ทั้งหมด ${list.length} ตัว (${Object.entries(counts).map(([k, v]) => `${k}: ${v}`).join(", ")})`,
+        clean.map((d) => `${d.kind}: ${d.label}${d.groupId ? ` [group: ${d.groupId.slice(0, 8)}…]` : ""}`).join(" | ")
       );
     } catch (err) {
       const d = describeError(err);
@@ -320,7 +326,14 @@ export default function GetUserMediaPocPage() {
     }
     checkPermissions();
     refreshDevices();
+    /* auto-rescan ทุกครั้งที่อุปกรณ์เสียบ/ถอด (devicechange) */
+    const onDeviceChange = () => {
+      log("INFO", "enumerateDevices", "ตรวจพบการเปลี่ยนแปลงของอุปกรณ์ (devicechange) — สแกนใหม่");
+      refreshDevices();
+    };
+    navigator.mediaDevices?.addEventListener?.("devicechange", onDeviceChange);
     return () => {
+      navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -334,6 +347,16 @@ export default function GetUserMediaPocPage() {
       () => log("WARN", "log", "คัดลอก log ไม่ได้ (clipboard ถูก block)")
     );
   }, [logs, log]);
+
+  const copyDeviceId = useCallback(
+    (deviceId: string) => {
+      navigator.clipboard?.writeText(deviceId).then(
+        () => log("SUCCESS", "deviceId", `คัดลอก deviceId แล้ว (${deviceId.slice(0, 12)}…)`),
+        () => log("WARN", "deviceId", "คัดลอก deviceId ไม่ได้ (clipboard ถูก block)")
+      );
+    },
+    [log]
+  );
 
   const downloadLogs = useCallback(() => {
     const text = logs.map((l) => `[${l.time}] [${l.level}] [${l.category}] ${l.message}${l.detail ? ` :: ${l.detail}` : ""}`).join("\n");
@@ -417,6 +440,9 @@ export default function GetUserMediaPocPage() {
       {/* อุปกรณ์ */}
       <section className="card">
         <h2>3) อุปกรณ์ที่ตรวจพบ (enumerateDevices)</h2>
+        <p className="hint" style={{ marginTop: -6 }}>
+          🖱️ คลิกที่ <code>deviceId</code> เพื่อคัดลอก · สแกนอัตโนมัติเมื่อเสียบ/ถอดอุปกรณ์ (<code>devicechange</code>) · label จะโผล่หลังขอสิทธิ์แล้ว
+        </p>
         {devices.length === 0 ? (
           <p className="hint">ยังไม่มีข้อมูล — กดปุ่ม "สแกนอุปกรณ์" หรือขอสิทธิ์กล้องก่อน แล้ว label ของอุปกรณ์จะโผล่</p>
         ) : (
@@ -433,7 +459,16 @@ export default function GetUserMediaPocPage() {
                 />
                 <span className="device-kind">{d.kind}</span>
                 <span className="device-label">{d.label}</span>
-                <code className="device-id">{d.deviceId.slice(0, 24)}…</code>
+                <code
+                  className="device-id"
+                  title={`deviceId: ${d.deviceId}\ngroupId: ${d.groupId}\n(คลิกเพื่อคัดลอก deviceId)`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    copyDeviceId(d.deviceId);
+                  }}
+                >
+                  {d.deviceId.slice(0, 24)}…
+                </code>
               </label>
             ))}
           </div>

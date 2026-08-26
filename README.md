@@ -63,7 +63,7 @@ git checkout master
 |---|---|
 | **สถานะสิทธิ์** | Permissions API (`navigator.permissions.query`) เช็คสถานะ `prompt / granted / denied` ของกล้อง+ไมค์ แบบ realtime |
 | **ขอสิทธิ์ 7 แบบ** | `video: true`, HD 720p, FHD 1080p, `facingMode: user` (กล้องหน้า), `facingMode: environment` (กล้องหลัง), กล้อง+ไมค์, ไมค์อย่างเดียว |
-| **deviceId** | `enumerateDevices()` + เลือกกล้องจากรายการ แล้วขอด้วย `{ deviceId: { exact } }` |
+| **deviceId** | `enumerateDevices()` + เลือกกล้องจากรายการ แล้วขอด้วย `{ deviceId: { exact } }` — คลิก deviceId เพื่อคัดลอก, auto-rescan เมื่อเสียบ/ถอดอุปกรณ์ (`devicechange` event) |
 | **แชร์หน้าจอ** | `getDisplayMedia()` |
 | **พรีวิว** | ดูภาพสด + แสดง `getSettings()` (resolution, fps, facingMode, deviceId) และรายชื่อ tracks |
 | **หยุด stream** | `stop()` ทุก track |
